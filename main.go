@@ -26,6 +26,7 @@ type Command interface {
 var availableCommands = []Command{
 	&commands.EchoCommand{},
 	&commands.HelpCommand{},
+	&commands.ModelsCommand{},
 	&commands.QuitCommand{},
 }
 
@@ -57,7 +58,9 @@ func main() {
 		matchingCommandsLen := len(matchingCommands)
 
 		if matchingCommandsLen == 0 {
-			command = &commands.HelpCommand{}
+			command = &commands.HelpCommand{
+				Model: "qwen2.5-coder:7b",
+			}
 		} else if matchingCommandsLen == 1 {
 			command = matchingCommands[0]
 		} else {

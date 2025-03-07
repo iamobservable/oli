@@ -13,18 +13,20 @@ import (
 
 var VALID_HELP_ALIASES = []string{"/help", "/h"}
 
-type HelpCommand struct{}
+type HelpCommand struct {
+	Model string
+}
 
 func (c *HelpCommand) Execute(ctx context.Context, args []string) error {
-	cc, err := services.GetUniqueChatConversation()
+	cc, err := services.GetUniqueChatConversation(c.Model)
 	if err != nil {
 		return fmt.Errorf("error getting chat converstation: %v", err)
 	}
 
 	if len(args) == 0 {
-		cc.Messages = append(cc.Messages, services.NewUserMessage("How can you help me?"))
+		cc.Messages = append(cc.Messages, services.NewUserMessage(&cc.Model, "How can you help me?"))
 	} else {
-		cc.Messages = append(cc.Messages, services.NewUserMessage(fmt.Sprintf("Provide help on %v", strings.Join(args, " "))))
+		cc.Messages = append(cc.Messages, services.NewUserMessage(&cc.Model, fmt.Sprintf("Provide help on %v", strings.Join(args, " "))))
 	}
 
 	chatRequest := services.ChatRequest{
@@ -61,7 +63,7 @@ func (c *HelpCommand) Execute(ctx context.Context, args []string) error {
 		content = append(content, cr.Message.Content)
 
 		if cr.Done {
-			assistentMessage := services.NewAssistantMessage(strings.Join(content, ""))
+			assistentMessage := services.NewAssistantMessage(&cr.Model, strings.Join(content, ""))
 			cc.Messages = append(cc.Messages, assistentMessage)
 
 			err := services.SaveChatConversation(cc)

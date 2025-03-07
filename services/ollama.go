@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,8 +18,9 @@ type OllamaService struct {
 }
 
 type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Model   *string `json:"model"`
+	Role    string  `json:"role"`
+	Content string  `json:"content"`
 }
 
 type ChatRequest struct {
@@ -42,7 +44,7 @@ type ChatConversation struct {
 	Path     string        `json:"path"`
 }
 
-func GetUniqueChatConversation() (*ChatConversation, error) {
+func GetUniqueChatConversation(defaultModel string) (*ChatConversation, error) {
 	path, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("error accessing the user home directory: %v", err)
@@ -61,7 +63,7 @@ func GetUniqueChatConversation() (*ChatConversation, error) {
 	if err != nil {
 		return &ChatConversation{
 			Id:    id,
-			Model: "qwen2.5-coder:7b",
+			Model: defaultModel,
 			Messages: []ChatMessage{
 				NewSystemMessage(`
           You are a helpful, friendly, and direct llm model assistant named Oliver. Here are some details about you:
@@ -95,8 +97,9 @@ func SaveChatConversation(cc *ChatConversation) error {
 	return nil
 }
 
-func NewAssistantMessage(content string) ChatMessage {
+func NewAssistantMessage(model *string, content string) ChatMessage {
 	return ChatMessage{
+		Model:   model,
 		Role:    "assistant",
 		Content: content,
 	}
@@ -109,8 +112,9 @@ func NewSystemMessage(content string) ChatMessage {
 	}
 }
 
-func NewUserMessage(content string) ChatMessage {
+func NewUserMessage(model *string, content string) ChatMessage {
 	return ChatMessage{
+		Model:   model,
 		Role:    "user",
 		Content: content,
 	}
@@ -138,19 +142,55 @@ func (s *OllamaService) Chat(req *ChatRequest) (*bufio.Reader, error) {
 	return bufio.NewReader(res.Body), nil
 }
 
-// type ListModelsRequest struct {
-// 	Model    string        `json:"model"`
-// 	Messages []ChatMessage `json:"messages"`
-// 	Stream   bool          `json:"stream"`
-// }
-//
-// type ChatResponse struct {
-// 	Model      string      `json:"model"`
-// 	CreatedAt  string      `json:"created_at"`
-// 	Message    ChatMessage `json:"message"`
-// 	Done       bool        `json:"done"`
-// 	DoneReason string      `json:"done_response"`
-// }
-//
-//
-// func *s *OllamaService) Modeels(req *ModelsRequest) (*ModelsResponse, error) {}
+type TagsRequest struct{}
+
+type TagModelDetails struct {
+	ParentModel       string   `json:"parent_model"`
+	Format            string   `json:"format"`
+	Family            string   `json:"family"`
+	Familiies         []string `json:"families"`
+	ParameterSize     string   `json:"parameter_size"`
+	QuantizationLevel string   `json:"quantization_level"`
+}
+
+type TagModel struct {
+	Name       string          `json:"name"`
+	Model      string          `json:"model"`
+	ModifiedAt string          `json:"modified_at"`
+	Digest     string          `json:"digest"`
+	Details    TagModelDetails `json:"details"`
+}
+
+type TagsResponse struct {
+	Models []TagModel `json:"models"`
+}
+
+func (s *OllamaService) Models(req *TagsRequest) (*TagsResponse, error) {
+	if s.BASE_URL == "" {
+		fmt.Print("environment variable missing: ollama_base_url")
+	}
+
+	url := fmt.Sprintf("%s/api/tags", s.BASE_URL)
+
+	response, err := http.Get(url)
+	if err != nil {
+		fmt.Println("failed to query /api/tags:", err)
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println("failed to read response body:", err)
+		return nil, err
+	}
+
+	var tagsResponse TagsResponse
+	err = json.Unmarshal(responseBody, &tagsResponse)
+	if err != nil {
+		fmt.Println("failed to unmarshal response body:", err)
+		return nil, err
+	}
+
+	return &tagsResponse, nil
+}
